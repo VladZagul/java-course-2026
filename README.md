@@ -1,80 +1,176 @@
-# ЛР №7–9. Типізований CRUD-сервіс: узагальнення, колекції, сортування
+# ЛР №10. Maven. Робота з реляційною БД через JDBC
 
 **Тема проєкту №14 — система бронювання квитків на автобус.**
 
-## Сутності
+## Предметна область
 
-Дві сутності, обидві успадковують `BaseEntity`:
+Рейси (`Trip` та підкласи з ЛР6), бронювання (`Booking`) і вільні місця в кожному рейсі. Сховище в пам'яті з ЛР7–9 доповнено сховищем у БД. Інтерфейси `CRUDService<T>` і `TripService` не змінювалися: `CrudDemo` з ЛР7–9 без жодної правки працює і з `InMemoryTripService` (пункт меню 6), і з `JdbcTripService` (пункт меню 7).
 
-| Сутність | `name` у `BaseEntity` | Власні поля |
-|---|---|---|
-| `Trip` (ієрархія з ЛР6: `SuburbanTrip`, `IntercityTrip`, `InternationalTrip`) | маршрут | `departureTime`, `price` + поля підкласів |
-| `Booking` | ім'я пасажира | `trip`, `seats`, `status` |
+## Запуск з нуля
 
-## Нові класи
+Потрібні JDK 21+ і Maven. СУБД — **H2 у файловому режимі**: окремо нічого встановлювати не треба, драйвер підтягує Maven, а база створюється сама в папці `data/` при першому запуску.
+
+```bash
+mvn compile
+mvn exec:java
+```
+
+1. `mvn compile` завантажує залежності з `pom.xml` (драйвер H2) і компілює проєкт.
+2. Параметри підключення — у `src/main/resources/application.properties` (`db.url`, `db.user`, `db.password`, розмір пулу). Для H2 змінювати нічого не потрібно.
+3. На старті `DatabaseInitializer` виконує `init.sql`. Скрипт ідемпотентний (`CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`), тому повторний запуск нічого не ламає. Тестові дані зберігаються через `save()` (оновити або додати за id), тож при повторних запусках вони не дублюються.
+4. Щоб почати з порожньої бази, достатньо видалити папку `data/`.
+
+Пункти меню ЛР10: `7` — CRUD у БД, `8` — транзакція з відкатом, `9` — SQL-ін'єкція, `10` — пакетна вставка, `11` — посторінкове читання.
+
+## Структура
 
 ```
-src/bus/
-├── model/BaseEntity.java                  id, name, equals/hashCode за id
-├── exception/EntityNotFoundException.java
-├── service/
-│   ├── CRUDService.java                   CRUDService<T extends BaseEntity>
-│   ├── InMemoryCrudService.java           реалізація на LinkedHashMap
-│   ├── TripService.java                   findAllSortedByNameAndByDepartureTime()
-│   ├── InMemoryTripService.java
-│   └── EntityComparators.java             компаратори за id та іменем
-├── util/EntityPrinter.java                printAll(Collection<? extends BaseEntity>)
-└── demo/CrudDemo.java                     пункт меню 6
+pom.xml
+src/main/java/bus/
+├── db/DBConnection.java                 Singleton з пулом з'єднань (DataSource)
+├── db/DatabaseInitializer.java          виконання init.sql на старті
+├── exception/DataAccessException.java
+├── service/jdbc/
+│   ├── AbstractJdbcCrudService.java     Template Method для JDBC-сервісів
+│   ├── JdbcTripService.java             implements TripService
+│   ├── JdbcBookingService.java          друга сутність через абстрактний клас
+│   ├── JdbcSeatService.java             вільні місця в рейсах
+│   └── BookingPlacementService.java     транзакція «забронювати місця»
+└── demo/DbDemo.java                     пункти меню 8–11
+src/main/resources/
+├── application.properties
+└── init.sql
 ```
+
+## Maven
+
+`pom.xml`: `groupId` `ua.bus`, `artifactId` `bus-booking`, `version` `1.0-SNAPSHOT`, Java 21 (`maven.compiler.release`), кодування UTF-8. Залежність — `com.h2database:h2`. `exec-maven-plugin` з `mainClass` `bus.Main` дає запуск через `mvn exec:java`. Код перенесено в стандартну структуру `src/main/java`, ресурси — у `src/main/resources`.
+
+## Схема БД
+
+```mermaid
+erDiagram
+    trips ||--o{ bookings : "trip_id (ON DELETE RESTRICT)"
+    trips ||--o| trip_seats : "trip_id (ON DELETE CASCADE)"
+    trips {
+        BIGINT id PK
+        VARCHAR route "NOT NULL"
+        VARCHAR trip_type "NOT NULL, SUBURBAN / INTERCITY / INTERNATIONAL"
+        TIMESTAMP departure_time "NOT NULL"
+        NUMERIC price "NOT NULL, > 0"
+        INT stops_count "лише приміські"
+        BOOLEAN wifi "міжміські та міжнародні"
+        VARCHAR country "лише міжнародні"
+        NUMERIC border_fee "лише міжнародні"
+    }
+    bookings {
+        BIGINT id PK
+        VARCHAR passenger_name "NOT NULL"
+        BIGINT trip_id FK "NOT NULL"
+        INT seats "NOT NULL, > 0"
+        VARCHAR status "NOT NULL, DEFAULT NEW"
+    }
+    trip_seats {
+        BIGINT trip_id PK, FK
+        INT free_seats "NOT NULL, >= 0"
+    }
+```
+
+Найкращі практики в `init.sql`:
+- первинний ключ у кожній таблиці;
+- `NOT NULL` для обов'язкових полів;
+- `NUMERIC(10, 2)` для грошей: `FLOAT`/`DOUBLE` зберігають числа у двійковому вигляді, тому 0.1 + 0.2 ≠ 0.3, а для цін квитків це неприпустимо. У Java гроші читаються через `getBigDecimal()`; `TIMESTAMP` для часу відправлення читається як `LocalDateTime`;
+- `CHECK`: ціна > 0, кількість місць > 0, вільних місць ≥ 0, статус і тип рейсу лише з дозволеного списку. `chk_trips_fields` перевіряє, що в кожного типу рейсу заповнені саме його поля (у приміського — зупинки, у міжнародного — країна і збір тощо);
+- `UNIQUE (route, departure_time)`: два рейси одного маршруту не можуть відправлятися в той самий час — це дубль. Той самий маршрут в інший час дозволений (у демо є ранковий і вечірній «Чернівці — Київ»).
+
+Ієрархія рейсів зберігається в одній таблиці (`trip_type` + стовпці підкласів, зайві — `NULL`). У `JdbcTripService.mapRow()` за `trip_type` створюється потрібний підклас, а в `setParameters()` використано `switch` з pattern matching по sealed-ієрархії з ЛР6.
+
+**ON DELETE.**
+- `bookings → trips`: **RESTRICT**. Не можна видалити рейс, на який уже продано квитки: з CASCADE пасажири втратили б свої бронювання без попередження, а з SET NULL лишилися б бронювання «нікуди». Рейс спершу треба скасувати і повернути гроші. У демо (пункт 8) спроба видалити такий рейс закінчується повідомленням про помилку.
+- `trip_seats → trips`: **CASCADE**. Лічильник вільних місць без рейсу нічого не означає, тому видаляється разом із рейсом.
 
 ## Рівень 1
 
-**BaseEntity.** Абстрактний клас з `long id` і `String name`, обидва `final`: id не змінюється після створення. `Trip` і `Booking` успадковують його й передають id та назву через `super(...)`.
-
-**EntityNotFoundException — неперевірений (`RuntimeException`).** Контракт `CRUDService` обов'язковий і має сигнатуру `T findById(long id)` без `throws`, тому перевірений виняток туди не вписався б. Крім того, пошук неіснуючого id — це помилка того, хто викликає (передав id рейсу, якого немає), а не ситуація, яку кожен виклик зобов'язаний обробляти. Хто хоче — перехоплює його, як у `CrudDemo`. Виняток несе поле `id`.
-
-З тієї ж причини `DomainException` (ЛР3) тепер успадковується від `RuntimeException`: інакше кожне створення рейсу чи бронювання в сервісах і демо обросло б `throws`/`try-catch`. Ієрархія `DomainException → InvalidPriceException / InvalidQuantityException`, повторне збудження і перехоплення в `BookingInputDemo` працюють як раніше.
-
-**Навіщо `T extends BaseEntity`.** Без обмеження `T` був би просто `Object`, і всередині сервісу не можна було б викликати `entity.getId()` (ключ у `save()`) і `getName()` (сортування за іменем). Обмеження гарантує, що будь-яке `T` має id і назву, а `CRUDService<String>` просто не скомпілюється.
-
-**InMemoryCrudService\<T\>.** Один клас без змін працює з обома сутностями: `InMemoryTripService extends InMemoryCrudService<Trip>` і `new InMemoryCrudService<Booking>("Бронювання")`.
-
-**Демо (пункт меню 6):** додавання 5 рейсів; `save()` з наявним id = 2 оновлює рейс (новий час і ціна), кількість лишається 5; `delete(5)` → `true`, повторно → `false`; `findById(999)` → `EntityNotFoundException`.
+- **DBConnection — Singleton.** Приватний конструктор, `static synchronized getInstance()`. URL, користувач і пароль читаються з `application.properties`, у коді їх немає.
+- **JdbcTripService implements TripService** — `findById`, `save` (спершу `UPDATE`, якщо оновлено 0 рядків — `INSERT`), `delete`, `findAllSortedByName`. Тільки `PreparedStatement`. `Connection`, `PreparedStatement` і `ResultSet` закриваються через try-with-resources. Якщо рядка немає, `findById` кидає `EntityNotFoundException` з ЛР7. `SQLException` загортається в неперевірений `DataAccessException`, щоб не міняти сигнатури інтерфейсу.
 
 ## Рівень 2
 
-**findAllSortedByName() — через Comparator.** Сутностей дві, а порядків сортування кілька (за маршрутом, за маршрутом і часом, за id, за сумою бронювання). `Comparable` дає лише один «природний» порядок, вшитий у клас, і для `Trip` його довелося б оголосити в абстрактному класі або в `BaseEntity`. `Comparator` описується окремо, комбінується (`thenComparing`) і може бути спільним для різних типів. Порівняння назв іде через `Collator` з українською локаллю: звичайний `String.compareTo()` порівнює коди символів і ставить «Є», «І», «Ї», «Ґ» не на свої місця за абеткою.
+- **Друга таблиця і сутність** — `bookings` (`JdbcBookingService`), зв'язок «один рейс — багато бронювань» через `FOREIGN KEY`.
+- **`findAllSortedByNameAndByDepartureTime()`** — `ORDER BY route, departure_time, id` у SQL. `findAllSortedByName()` у JDBC-версії теж сортує в БД (`ORDER BY route, id`).
+- **`mapRow(ResultSet)`** — перетворення рядка на об'єкт в одному місці. Всі запити (`findById`, `findAllSorted...`, `findPage`, `findByRoute`) йдуть через спільний `query()`, який викликає `mapRow()`.
+- **Автоматичний `init.sql`** — див. «Запуск з нуля».
+- **Транзакція (пункт 8).** `BookingPlacementService.placeBooking()` в одній транзакції додає рядок у `bookings` і зменшує `free_seats` у `trip_seats`: `setAutoCommit(false)` → два запити → `commit()`, при помилці `rollback()`. Демо: у рейсі «Чернівці — Варшава» 5 вільних місць; бронювання на 2 місця проходить (лишається 3); бронювання на 10 місць вставляє рядок у `bookings`, але `UPDATE trip_seats` порушує `CHECK (free_seats >= 0)` → `rollback()`. У результаті вільних місць так і лишається 3, а бронювання #502 в таблиці немає — відкотилась і вставка, що вже виконалась.
 
-**TripService.** `findAllSortedByNameAndByDepartureTime()` залежить від поля `departureTime`, яке є лише в `Trip`, тому метод не в загальному `CRUDService<T>`, а в окремому `TripService extends CRUDService<Trip>`. Реалізація — `InMemoryTripService extends InMemoryCrudService<Trip> implements TripService`: спочатку за маршрутом, при збігу — за часом відправлення. Тут теж `Comparator`, бо це другий, додатковий порядок для рейсів.
+### SQL-ін'єкція (пункт 9)
 
-**Сортування не змінює сховище.** `findAllSorted()` копіює значення в новий `ArrayList` і сортує копію. У демо є два рейси «Чернівці — Київ» (07:30 і 21:45), причому вечірній додано першим. Після `findAllSortedByName()` вони стоять разом, але в порядку додавання; після `findAllSortedByNameAndByDepartureTime()` ранковий іде перед вечірнім. Список виводиться до сортування, після обох сортувань і ще раз — щоб показати, що порядок у сховищі той самий.
+«Поганий» метод — склеювання рядка в `Statement`. В основному коді його немає, тільки тут:
 
-**Вибір колекції — `LinkedHashMap<Long, T>`.**
+```java
+public List<Trip> findByRouteUnsafe(String route) {
+    String sql = "SELECT * FROM trips WHERE route = '" + route + "'";
+    try (Connection connection = getConnection();
+         Statement statement = connection.createStatement();
+         ResultSet rs = statement.executeQuery(sql)) {
+        ...
+    }
+}
+```
 
-| Колекція | findById | save (додати / оновити) | delete | Відсортований список |
-|---|---|---|---|---|
-| `ArrayList<T>` | O(n) — перебір | O(n) — спершу пошук за id | O(n) | O(n log n) |
-| `HashMap<Long, T>` | O(1) | O(1) | O(1) | O(n log n) |
-| `LinkedHashMap<Long, T>` | O(1) | O(1) | O(1) | O(n log n) |
-| `TreeMap<Long, T>` | O(log n) | O(log n) | O(log n) | O(n log n) (сортований лише за id) |
+Для введення `' OR '1'='1` виходить запит:
 
-Основні операції сервісу йдуть за id, тому потрібна мапа з ключем id. `ArrayList` на кожен `save` і `findById` перебирає список. `TreeMap` тримає порядок за id, але нам потрібні сортування за маршрутом і часом, тож це не допомагає. Між `HashMap` і `LinkedHashMap` обрано другий: та ж складність, але зберігає порядок додавання, тому вивід «до сортування» передбачуваний.
+```sql
+SELECT * FROM trips WHERE route = '' OR '1'='1'
+```
 
-**equals()/hashCode() за id.** Перевизначені в `BaseEntity` як `final`, щоб підкласи не порушили правило «та сама сутність = той самий id». Порівняння полів з ЛР6 у `Trip` і `Booking` прибрано: рейс, у якого змінили час відправлення, лишається тим самим рейсом (демо в пункті 5). `getClass()` гарантує, що рейс і бронювання з однаковим id не рівні.
+Умова завжди істинна, і метод повертає **всі** рейси (перевірено на тестовій базі: 5 рядків замість 0). Так само можна було б дописати `; DROP TABLE ...` або витягнути чужі бронювання з іменами пасажирів.
 
-**Узгодженість з equals.** Компаратор за маршрутом не узгоджений з `equals`: два різні рейси «Чернівці — Київ» (id 1 і 3) порівнюються як 0, але `equals` дає `false`. `Comparable<Booking>` (за сумою, з ЛР4) так само неузгоджений. Для `List.sort()` це не проблема. Але в `TreeSet`/`TreeMap` з таким компаратором один із «рівних» за компаратором рейсів просто пропав би, бо ці колекції вважають об'єкти однаковими за `compare() == 0`, а не за `equals()`. Тому для сховища використано мапу за id, а сортування робиться лише в нових списках.
+«Хороший» метод `JdbcTripService.findByRoute()`:
+
+```java
+return query(getSelectSql() + " WHERE route = ?", route);
+```
+
+У `PreparedStatement` SQL-текст компілюється окремо від даних, а значення передається як параметр. Рядок `' OR '1'='1` — це просто назва маршруту, якого немає, тому результат порожній.
 
 ## Рівень 3
 
-**`findAllSorted(Comparator<? super T>)`.** Узагальнений метод у `CRUDService`. Через нього реалізовані обидва сортування, а `findAllSortedByName()` став default-методом інтерфейсу. Параметр має тип `Comparator<? super T>`, бо компаратор, що вміє порівнювати будь-яку `BaseEntity`, вміє порівнювати й `Trip`. З `Comparator<T>` у `CRUDService<Trip>` не можна було б передати `Comparator<BaseEntity>`, хоча він підходить. У демо один `EntityComparators.BY_ID.reversed()` типу `Comparator<BaseEntity>` сортує і рейси, і бронювання.
+### Template Method: AbstractJdbcCrudService\<T extends BaseEntity\>
 
-**`printAll(Collection<? extends BaseEntity>)`.** Generics інваріантні: `List<Trip>` не є `List<BaseEntity>`. Якби це було дозволено, через посилання `List<BaseEntity>` у список рейсів можна було б додати `Booking`. Wildcard `? extends BaseEntity` дозволяє лише читати елементи як `BaseEntity` і не дозволяє додавати, тому туди безпечно передавати і `List<Trip>`, і `List<Booking>`.
+Скелет усіх операцій (`findById`, `save`, `delete`, `findAllSorted`, `findAllSortedByName`, `findPage`, `query`) з відкриттям з'єднання, try-with-resources та обробкою `SQLException` написаний один раз в абстрактному класі. Підкласи надають лише «змінні кроки»: назву таблиці, SQL-запити (`getSelectSql`, `getInsertSql`, `getUpdateSql`), стовпець для сортування за іменем, `mapRow(ResultSet)` і `setParameters(PreparedStatement, T)`. `INSERT` і `UPDATE` мають однаковий порядок параметрів (id останній), тому одного `setParameters()` досить для обох. `JdbcBookingService` реалізовано вже повністю через цей клас.
 
-## Запуск
+Назви таблиць і стовпців підставляються в SQL рядком, але вони беруться з коду підкласу, а не з введення користувача, тому ін'єкції тут немає. Усі значення — тільки через параметри `?`.
 
-```bash
-javac -d out $(find src -name "*.java")
-java -cp out bus.Main
-```
+### Singleton з одним Connection — у чому проблема
 
-Новий пункт меню: `6` — CRUD-сервіс у пам'яті.
+Якби `DBConnection` тримав один спільний `Connection`:
+- **багатопотоковість** — `Connection` не розрахований на одночасне використання з кількох потоків. Якщо дві каси автовокзалу бронюють одночасно, їхні запити перемішуються або блокують одне одного;
+- **розрив з'єднання** — після тайм-ауту сервера чи перезапуску БД єдине з'єднання «мертве», і вся програма падає, доки її не перезапустять;
+- **транзакції** — `setAutoCommit(false)` і `commit()/rollback()` діють на все з'єднання. Якщо одна каса почала транзакцію бронювання, а інша в цей час виконала свій запит, той потрапить у чужу транзакцію і відкотиться або закомітиться разом із нею;
+- **закриття** — try-with-resources у будь-якому методі закрив би спільне з'єднання для всіх інших.
+
+**Реалізовано варіант b: Singleton тримає `DataSource`, а не `Connection`.** `DBConnection` створює пул з'єднань H2 (`JdbcConnectionPool`, реалізує `javax.sql.DataSource`, розмір — `db.pool.max-connections`). `getConnection()` щоразу видає окреме з'єднання з пулу, а `close()` у try-with-resources повертає його в пул. Кожна транзакція має своє з'єднання. `getInstance()` синхронізований, тож пул створюється рівно один раз навіть при паралельних викликах. При виході з програми `DBConnection.shutdown()` закриває пул.
+
+### Пакетна вставка (пункт 10)
+
+5000 рейсів вставляються двома способами (той самий `INSERT`, той самий `PreparedStatement`):
+- по одному: `executeUpdate()` для кожного запису в режимі автокоміту;
+- пакетом: `addBatch()` + `executeBatch()` кожні 500 записів, одна транзакція з `commit()` в кінці.
+
+Результати (H2 у файловому режимі, три запуски):
+
+| Спосіб | Запуск 1 | Запуск 2 | Запуск 3 |
+|---|---|---|---|
+| По одному | 826 мс | 804 мс | 865 мс |
+| Пакетом | 513 мс | 264 мс | 277 мс |
+| Прискорення | ×1.6 | ×3.0 | ×3.1 |
+
+Пакетна вставка в ~3 рази швидша: менше звернень до драйвера і БД, а головне — один коміт замість 5000 (кожен коміт у файловій БД — запис на диск). Перший запуск повільніший, бо JVM ще «розігрівається». Із серверною СУБД різниця ще більша, бо кожен окремий запит — це ще й мережевий обмін. Після вимірювання тестові записи видаляються.
+
+> Час залежить від комп'ютера: після запуску пункту 10 на своєму ПК можна вписати свої числа.
+
+### Посторінкове читання (пункт 11)
+
+`findPage(page, pageSize)` в `AbstractJdbcCrudService`: `ORDER BY id LIMIT ? OFFSET ?`. `ORDER BY` обов'язковий, інакше порядок рядків між сторінками не гарантований.
+
+`findAll()` без обмежень небезпечний на великій таблиці: усі рядки за один раз передаються з БД і стають об'єктами в пам'яті. Розклад автовокзалу за кілька років — це сотні тисяч рейсів, і такий запит означає довге очікування, великий трафік і `OutOfMemoryError`, хоча касиру потрібна лише перша сторінка. Посторінкове читання тримає в пам'яті одну сторінку.

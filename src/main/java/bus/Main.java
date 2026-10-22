@@ -3,23 +3,30 @@ package bus;
 import java.time.LocalDateTime;
 import java.util.Scanner;
 
+import bus.db.DBConnection;
+import bus.db.DatabaseInitializer;
 import bus.demo.BookingInputDemo;
 import bus.demo.CrudDemo;
+import bus.demo.DbDemo;
 import bus.demo.FareDemo;
 import bus.demo.StatusDemo;
 import bus.demo.TripDemo;
+import bus.exception.DataAccessException;
 import bus.model.Booking;
 import bus.model.IntercityTrip;
 import bus.model.InternationalTrip;
 import bus.model.SuburbanTrip;
 import bus.service.InMemoryCrudService;
 import bus.service.InMemoryTripService;
+import bus.service.jdbc.JdbcBookingService;
+import bus.service.jdbc.JdbcTripService;
 
 public class Main {
 
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
         try {
+            initDatabase();
             Booking[] bookings = createSampleBookings();
             boolean running = true;
             while (running) {
@@ -44,6 +51,24 @@ public class Main {
                     case "6":
                         CrudDemo.run(new InMemoryTripService(), new InMemoryCrudService<>("Бронювання"));
                         break;
+                    case "7":
+                        runDbAction(() -> {
+                            JdbcTripService tripService = new JdbcTripService();
+                            CrudDemo.run(tripService, new JdbcBookingService(tripService));
+                        });
+                        break;
+                    case "8":
+                        runDbAction(DbDemo::runTransaction);
+                        break;
+                    case "9":
+                        runDbAction(DbDemo::runSqlInjection);
+                        break;
+                    case "10":
+                        runDbAction(DbDemo::runBatchBenchmark);
+                        break;
+                    case "11":
+                        runDbAction(DbDemo::runPagination);
+                        break;
                     case "0":
                         running = false;
                         break;
@@ -52,6 +77,7 @@ public class Main {
                 }
             }
         } finally {
+            DBConnection.shutdown();
             System.out.println("\nРоботу програми завершено.");
             scanner.close();
         }
@@ -65,8 +91,30 @@ public class Main {
         System.out.println("4 - Статуси бронювань: Observer (ЛР5)");
         System.out.println("5 - Ієрархія рейсів (ЛР6)");
         System.out.println("6 - CRUD-сервіс у пам'яті (ЛР7-9)");
+        System.out.println("7 - CRUD-сервіс у БД (ЛР10)");
+        System.out.println("8 - Транзакція з відкатом (ЛР10)");
+        System.out.println("9 - PreparedStatement і SQL-ін'єкція (ЛР10)");
+        System.out.println("10 - Пакетна вставка (ЛР10)");
+        System.out.println("11 - Посторінкове читання (ЛР10)");
         System.out.println("0 - Вихід");
         System.out.print("Ваш вибір: ");
+    }
+
+    private static void initDatabase() {
+        try {
+            DatabaseInitializer.init();
+            System.out.println("Базу даних підготовлено (init.sql).");
+        } catch (DataAccessException e) {
+            System.out.println("Увага: " + e.getMessage());
+        }
+    }
+
+    private static void runDbAction(Runnable action) {
+        try {
+            action.run();
+        } catch (DataAccessException e) {
+            System.out.println("Помилка роботи з БД: " + e.getMessage());
+        }
     }
 
     private static void printBookings(Booking[] bookings) {

@@ -9,10 +9,10 @@ import bus.observer.BookingObserver;
 public class Booking extends BaseEntity implements Payable, Comparable<Booking> {
     private final Trip trip;
     private final int seats;
-    private BookingStatus status = BookingStatus.NEW;
+    private BookingStatus status;
     private final List<BookingObserver> observers = new ArrayList<>();
 
-    public Booking(long id, String passengerName, Trip trip, int seats) {
+    public Booking(long id, String passengerName, Trip trip, int seats, BookingStatus status) {
         super(id, passengerName);
         if (seats <= 0) {
             throw new InvalidQuantityException(
@@ -21,6 +21,11 @@ public class Booking extends BaseEntity implements Payable, Comparable<Booking> 
         }
         this.trip = trip;
         this.seats = seats;
+        this.status = status;
+    }
+
+    public Booking(long id, String passengerName, Trip trip, int seats) {
+        this(id, passengerName, trip, seats, BookingStatus.NEW);
     }
 
     public void addObserver(BookingObserver observer) {
