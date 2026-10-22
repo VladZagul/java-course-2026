@@ -6,7 +6,19 @@ public class Order {
     private int quantity;
     private double pricePerUnit;
 
-    public Order(String customerName, String itemName, int quantity, double pricePerUnit) {
+    public Order(String customerName, String itemName, int quantity, double pricePerUnit)
+            throws InvalidPriceException, InvalidQuantityException {
+        if (quantity <= 0) {
+            throw new InvalidQuantityException(
+                "Кількість товару має бути додатньою, отримано: " + quantity, quantity
+            );
+        }
+        if (pricePerUnit <= 0) {
+            throw new InvalidPriceException(
+                "Ціна за одиницю має бути додатньою, отримано: " + pricePerUnit, pricePerUnit
+            );
+        }
+
         this.customerName = customerName;
         this.itemName = itemName;
         this.quantity = quantity;

@@ -1,12 +1,33 @@
+import java.util.InputMismatchException;
 import java.util.Scanner;
 
 public class Main {
+
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
+        try {
+            runOrderProcessing(scanner);
+        } finally {
+            System.out.println("\nРоботу програми завершено.");
+            scanner.close();
+        }
+    }
 
-        System.out.print("Скільки замовлень введемо? ");
-        int n = scanner.nextInt();
-        scanner.nextLine();
+    private static void runOrderProcessing(Scanner scanner) {
+
+        int n = 0;
+        boolean validCount = false;
+        while (!validCount) {
+            System.out.print("Скільки замовлень введемо? ");
+            try {
+                n = scanner.nextInt();
+                scanner.nextLine();
+                validCount = true;
+            } catch (InputMismatchException e) {
+                System.out.println("Помилка: потрібно ввести ціле число. Спробуйте ще раз.");
+                scanner.nextLine();
+            }
+        }
 
         Order[] orders = new Order[n];
 
@@ -19,14 +40,34 @@ public class Main {
             System.out.print("  Назва товару: ");
             String itemName = scanner.nextLine();
 
-            System.out.print("  Кількість: ");
-            int quantity = scanner.nextInt();
+            int quantity = 0;
+            double pricePerUnit = 0;
+            try {
+                System.out.print("  Кількість: ");
+                quantity = scanner.nextInt();
 
-            System.out.print("  Ціна за одиницю: ");
-            double pricePerUnit = scanner.nextDouble();
-            scanner.nextLine();
+                System.out.print("  Ціна за одиницю: ");
+                pricePerUnit = scanner.nextDouble();
+                scanner.nextLine();
+            } catch (InputMismatchException e) {
+                System.out.println("Помилка: кількість і ціна мають бути числами. Це замовлення пропущено.");
+                scanner.nextLine();
+                i--; 
+                continue;
+            }
 
-            orders[i] = new Order(customerName, itemName, quantity, pricePerUnit);
+            try {
+                orders[i] = createOrderWithLogging(customerName, itemName, quantity, pricePerUnit);
+            } catch (InvalidQuantityException e) {
+                System.out.println("Некоректна кількість (" + e.getInvalidValue() + "): " + e.getMessage());
+                i--;
+            } catch (InvalidPriceException e) {
+                System.out.println("Некоректна ціна (" + e.getInvalidValue() + "): " + e.getMessage());
+                i--;
+            } catch (DomainException e) {
+                System.out.println("Доменна помилка: " + e.getMessage());
+                i--;
+            }
         }
 
         System.out.println();
@@ -35,73 +76,61 @@ public class Main {
             System.out.println(order);
         }
 
-        System.out.print("\nВведіть поріг суми для підрахунку: ");
-        double threshold = scanner.nextDouble();
-
-        int count = 0;
-        for (Order order : orders) {
-            if (order.getTotalCost() > threshold) {
-                count++;
+        System.out.print("\nНа скільки клієнтів розділити загальну суму (для середнього)? ");
+        try {
+            int divisor = scanner.nextInt();
+            scanner.nextLine();
+            int totalCostInt = 0;
+            for (Order order : orders) {
+                totalCostInt += (int) order.getTotalCost();
             }
-        }
-        System.out.printf("Замовлень із сумою більше %.2f: %d%n", threshold, count);
-
-        System.out.println("\n===== До сортування =====");
-        for (Order order : orders) {
-            System.out.println(order);
-        }
-
-        bubbleSortByTotalCost(orders);
-
-        System.out.println("\n===== Після сортування (за сумою, зростання) =====");
-        for (Order order : orders) {
-            System.out.println(order);
+            int average = totalCostInt / divisor;
+            System.out.println("Середня сума (ціла): " + average);
+        } catch (ArithmeticException e) {
+            System.out.println("Помилка: ділення на нуль неможливе. " + e.getMessage());
+        } catch (InputMismatchException e) {
+            System.out.println("Помилка: потрібно було ввести ціле число.");
+            scanner.nextLine();
         }
 
-        System.out.println("\nВведіть дані замовлення для пошуку в масиві:");
-        System.out.print("  Ім'я клієнта: ");
-        String searchCustomer = scanner.nextLine();
+        System.out.print("\nВведіть індекс замовлення для перегляду: ");
+        try {
+            int index = scanner.nextInt();
+            scanner.nextLine();
+            Order selected = orders[index]; 
+            System.out.println("Обране замовлення: " + selected);
+        } catch (InputMismatchException e) {
 
-        System.out.print("  Назва товару: ");
-        String searchItem = scanner.nextLine();
-
-        System.out.print("  Кількість: ");
-        int searchQuantity = scanner.nextInt();
-
-        System.out.print("  Ціна за одиницю: ");
-        double searchPrice = scanner.nextDouble();
-
-        Order sample = new Order(searchCustomer, searchItem, searchQuantity, searchPrice);
-        int foundIndex = linearSearch(orders, sample);
-
-        if (foundIndex != -1) {
-            System.out.println("Знайдено збіг на позиції " + foundIndex + ": " + orders[foundIndex]);
-        } else {
-            System.out.println("Точного збігу не знайдено.");
+            System.out.println("Помилка: індекс має бути цілим числом.");
+            scanner.nextLine();
+        } catch (ArrayIndexOutOfBoundsException e) {
+            System.out.println("Помилка: такого індексу немає в масиві (допустимо 0.." + (orders.length - 1) + ").");
+        } catch (Exception e) {
+            System.out.println("Непередбачена помилка: " + e.getMessage());
         }
 
-        scanner.close();
-    }
-
-    private static void bubbleSortByTotalCost(Order[] orders) {
-        int n = orders.length;
-        for (int i = 0; i < n - 1; i++) {
-            for (int j = 0; j < n - 1 - i; j++) {
-                if (orders[j].getTotalCost() > orders[j + 1].getTotalCost()) {
-                    Order temp = orders[j];
-                    orders[j] = orders[j + 1];
-                    orders[j + 1] = temp;
-                }
+        System.out.println("\n--- Демонстрація ієрархії власних винятків ---");
+        DomainException[] demoExceptions = {
+            new InvalidPriceException("демо: від'ємна ціна", -5.0),
+            new InvalidQuantityException("демо: нульова кількість", 0)
+        };
+        for (DomainException demo : demoExceptions) {
+            try {
+                throw demo;
+            } catch (DomainException e) {
+                System.out.println("Перехоплено як DomainException -> насправді: "
+                        + e.getClass().getSimpleName() + " | " + e.getMessage());
             }
         }
     }
 
-    private static int linearSearch(Order[] orders, Order sample) {
-        for (int i = 0; i < orders.length; i++) {
-            if (orders[i].equals(sample)) {
-                return i;
-            }
+    private static Order createOrderWithLogging(String customerName, String itemName, int quantity, double pricePerUnit)
+            throws DomainException {
+        try {
+            return new Order(customerName, itemName, quantity, pricePerUnit);
+        } catch (InvalidPriceException | InvalidQuantityException e) {
+            System.out.println("[LOG] Під час створення замовлення сталася помилка: " + e.getMessage());
+            throw e;
         }
-        return -1;
     }
 }
