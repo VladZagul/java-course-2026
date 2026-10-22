@@ -1,3 +1,8 @@
+package bus.desk;
+
+import bus.fare.Fare;
+import bus.model.Booking;
+
 public class TicketDesk {
     private Fare fare;
 

@@ -1,3 +1,7 @@
+package bus.fare;
+
+import bus.model.Booking;
+
 public class StudentFare extends AbstractFare {
 
     public StudentFare() {

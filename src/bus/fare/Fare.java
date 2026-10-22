@@ -1,3 +1,7 @@
+package bus.fare;
+
+import bus.model.Booking;
+
 public interface Fare {
     String getName();
 
@@ -9,6 +13,6 @@ public interface Fare {
 
     default String describe(Booking booking) {
         String document = requiresDocument() ? "потрібен документ" : "без документів";
-        return String.format("%-18s до сплати: %9.2f грн (%s)", getName(), calculateCost(booking), document);
+        return String.format("%-20s до сплати: %9.2f грн (%s)", getName(), calculateCost(booking), document);
     }
 }

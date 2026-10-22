@@ -1,3 +1,7 @@
+package bus.fare;
+
+import bus.model.Booking;
+
 public class GroupFare implements Fare {
     public static final int FREE_EVERY = 5;
 

@@ -1,10 +1,20 @@
+package bus.model;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
+
+import bus.exception.InvalidPriceException;
+import bus.exception.InvalidQuantityException;
+import bus.observer.BookingObserver;
 
 public class Booking implements Payable, Comparable<Booking> {
     private String passengerName;
     private String route;
     private int seats;
     private double pricePerSeat;
+    private BookingStatus status = BookingStatus.NEW;
+    private final List<BookingObserver> observers = new ArrayList<>();
 
     public Booking(String passengerName, String route, int seats, double pricePerSeat)
             throws InvalidPriceException, InvalidQuantityException {
@@ -23,6 +33,35 @@ public class Booking implements Payable, Comparable<Booking> {
         this.route = route;
         this.seats = seats;
         this.pricePerSeat = pricePerSeat;
+    }
+
+    public void addObserver(BookingObserver observer) {
+        if (!observers.contains(observer)) {
+            observers.add(observer);
+        }
+    }
+
+    public void removeObserver(BookingObserver observer) {
+        observers.remove(observer);
+    }
+
+    public void setStatus(BookingStatus newStatus) {
+        if (newStatus == status) {
+            return;
+        }
+        BookingStatus oldStatus = status;
+        status = newStatus;
+        notifyObservers(oldStatus, newStatus);
+    }
+
+    private void notifyObservers(BookingStatus oldStatus, BookingStatus newStatus) {
+        for (BookingObserver observer : observers) {
+            observer.onStatusChanged(this, oldStatus, newStatus);
+        }
+    }
+
+    public BookingStatus getStatus() {
+        return status;
     }
 
     @Override
@@ -54,8 +93,8 @@ public class Booking implements Payable, Comparable<Booking> {
     @Override
     public String toString() {
         return String.format(
-            "Пасажир: %-15s Рейс: %-20s Місць: %-3d Ціна: %-8.2f Сума: %.2f",
-            passengerName, route, seats, pricePerSeat, getTotalCost()
+            "Пасажир: %-15s Рейс: %-20s Місць: %-3d Ціна: %-8.2f Сума: %-9.2f Статус: %s",
+            passengerName, route, seats, pricePerSeat, getTotalCost(), status.getTitle()
         );
     }
 

@@ -1,21 +1,16 @@
-import java.util.Arrays;
+package bus.demo;
+
 import java.util.InputMismatchException;
 import java.util.Scanner;
 
-public class Main {
+import bus.exception.DomainException;
+import bus.exception.InvalidPriceException;
+import bus.exception.InvalidQuantityException;
+import bus.model.Booking;
 
-    public static void main(String[] args) {
-        Scanner scanner = new Scanner(System.in);
-        try {
-            Booking[] bookings = runBookingProcessing(scanner);
-            runFareDemo(scanner, bookings);
-        } finally {
-            System.out.println("\nРоботу програми завершено.");
-            scanner.close();
-        }
-    }
+public class BookingInputDemo {
 
-    private static Booking[] runBookingProcessing(Scanner scanner) {
+    public static Booking[] run(Scanner scanner) {
         int n = 0;
         boolean validCount = false;
         while (!validCount) {
@@ -128,76 +123,6 @@ public class Main {
         }
 
         return bookings;
-    }
-
-    private static void runFareDemo(Scanner scanner, Booking[] bookings) {
-        System.out.println("\n===== Тарифи =====");
-        Booking booking = bookings[0];
-        System.out.println("Бронювання: " + booking);
-
-        Fare[] fares = {
-            new FullFare(),
-            new StudentFare(),
-            new ChildFare(),
-            new GroupFare()
-        };
-        for (Fare fare : fares) {
-            System.out.println(fare.describe(booking));
-        }
-
-        System.out.println("\n===== Бронювання, відсортовані за сумою (Comparable) =====");
-        Booking[] sorted = Arrays.copyOf(bookings, bookings.length);
-        Arrays.sort(sorted);
-        for (Booking b : sorted) {
-            System.out.println(b);
-        }
-
-        Payable[] payables = bookings;
-        double total = 0;
-        for (Payable payable : payables) {
-            total += payable.getTotalCost();
-        }
-        System.out.printf("Загальна сума всіх бронювань: %.2f грн%n", total);
-
-        System.out.println("\n===== Каса (Strategy) =====");
-        TicketDesk desk = new TicketDesk(new FullFare());
-        desk.printTicket(booking);
-
-        boolean running = true;
-        while (running) {
-            System.out.print("\nЗмінити тариф (1 - повний, 2 - студентський, 3 - дитячий, 4 - груповий, 0 - завершити): ");
-            int choice;
-            try {
-                choice = scanner.nextInt();
-                scanner.nextLine();
-            } catch (InputMismatchException e) {
-                System.out.println("Потрібно ввести число.");
-                scanner.nextLine();
-                continue;
-            }
-
-            switch (choice) {
-                case 1:
-                    desk.setFare(new FullFare());
-                    break;
-                case 2:
-                    desk.setFare(new StudentFare());
-                    break;
-                case 3:
-                    desk.setFare(new ChildFare());
-                    break;
-                case 4:
-                    desk.setFare(new GroupFare());
-                    break;
-                case 0:
-                    running = false;
-                    continue;
-                default:
-                    System.out.println("Немає такого тарифу.");
-                    continue;
-            }
-            desk.printTicket(booking);
-        }
     }
 
     private static Booking createBookingWithLogging(String passengerName, String route, int seats, double pricePerSeat)

@@ -1,3 +1,7 @@
+package bus.fare;
+
+import bus.model.Booking;
+
 public abstract class AbstractFare implements Fare {
     private final String name;
     private final int discountPercent;

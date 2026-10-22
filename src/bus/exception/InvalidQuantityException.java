@@ -1,3 +1,5 @@
+package bus.exception;
+
 public class InvalidQuantityException extends DomainException {
     private final int invalidValue;
 

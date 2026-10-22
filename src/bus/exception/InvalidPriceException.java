@@ -1,3 +1,5 @@
+package bus.exception;
+
 public class InvalidPriceException extends DomainException {
     private final double invalidValue;
 
