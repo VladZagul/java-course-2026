@@ -2,27 +2,25 @@ package bus.model;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Objects;
 
 import bus.exception.InvalidPriceException;
 
-public abstract sealed class Trip permits SuburbanTrip, IntercityTrip {
+public abstract sealed class Trip extends BaseEntity permits SuburbanTrip, IntercityTrip {
     public static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
 
     private static boolean traceConstructors = false;
 
-    private final String route;
     private final LocalDateTime departureTime;
     private final double price;
 
-    protected Trip(String route, LocalDateTime departureTime, double price) throws InvalidPriceException {
+    protected Trip(long id, String route, LocalDateTime departureTime, double price) {
+        super(id, route);
         if (price <= 0) {
             throw new InvalidPriceException("Ціна квитка має бути додатньою, отримано: " + price, price);
         }
-        this.route = route;
         this.departureTime = departureTime;
         this.price = price;
-        trace("1. Trip: route = " + route + ", price = " + price);
+        trace("1. Trip: id = " + id + ", route = " + route + ", price = " + price);
     }
 
     public static void setTraceConstructors(boolean enabled) {
@@ -36,7 +34,7 @@ public abstract sealed class Trip permits SuburbanTrip, IntercityTrip {
     }
 
     public String getRoute() {
-        return route;
+        return getName();
     }
 
     public LocalDateTime getDepartureTime() {
@@ -65,26 +63,7 @@ public abstract sealed class Trip permits SuburbanTrip, IntercityTrip {
 
     @Override
     public String toString() {
-        return String.format("%s рейс \"%s\", відправлення %s, ціна %.2f грн",
-                getTypeName(), route, departureTime.format(DATE_TIME), price);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) {
-            return true;
-        }
-        if (obj == null || getClass() != obj.getClass()) {
-            return false;
-        }
-        Trip other = (Trip) obj;
-        return Double.compare(price, other.price) == 0
-                && route.equals(other.route)
-                && departureTime.equals(other.departureTime);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(route, departureTime, price);
+        return String.format("#%d %s рейс \"%s\", відправлення %s, ціна %.2f грн",
+                getId(), getTypeName(), getName(), departureTime.format(DATE_TIME), price);
     }
 }

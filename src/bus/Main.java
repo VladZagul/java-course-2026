@@ -4,14 +4,16 @@ import java.time.LocalDateTime;
 import java.util.Scanner;
 
 import bus.demo.BookingInputDemo;
+import bus.demo.CrudDemo;
 import bus.demo.FareDemo;
 import bus.demo.StatusDemo;
 import bus.demo.TripDemo;
-import bus.exception.DomainException;
 import bus.model.Booking;
 import bus.model.IntercityTrip;
 import bus.model.InternationalTrip;
 import bus.model.SuburbanTrip;
+import bus.service.InMemoryCrudService;
+import bus.service.InMemoryTripService;
 
 public class Main {
 
@@ -39,6 +41,9 @@ public class Main {
                     case "5":
                         TripDemo.run();
                         break;
+                    case "6":
+                        CrudDemo.run(new InMemoryTripService(), new InMemoryCrudService<>("Бронювання"));
+                        break;
                     case "0":
                         running = false;
                         break;
@@ -59,6 +64,7 @@ public class Main {
         System.out.println("3 - Тарифи: Strategy, Factory, Adapter (ЛР4-5)");
         System.out.println("4 - Статуси бронювань: Observer (ЛР5)");
         System.out.println("5 - Ієрархія рейсів (ЛР6)");
+        System.out.println("6 - CRUD-сервіс у пам'яті (ЛР7-9)");
         System.out.println("0 - Вихід");
         System.out.print("Ваш вибір: ");
     }
@@ -71,19 +77,15 @@ public class Main {
     }
 
     private static Booking[] createSampleBookings() {
-        try {
-            return new Booking[] {
-                new Booking("Олена Коваль",
-                        new IntercityTrip("Чернівці — Київ", LocalDateTime.of(2026, 11, 3, 7, 30), 780), 1),
-                new Booking("Андрій Бойко",
-                        new IntercityTrip("Чернівці — Львів", LocalDateTime.of(2026, 11, 3, 9, 15), 450, false), 6),
-                new Booking("Ірина Мельник",
-                        new InternationalTrip("Чернівці — Сучава", LocalDateTime.of(2026, 11, 4, 6, 0), 620, "Румунія"), 2),
-                new Booking("Петро Шевчук",
-                        new SuburbanTrip("Чернівці — Сторожинець", LocalDateTime.of(2026, 11, 3, 16, 40), 65, 12), 1)
-            };
-        } catch (DomainException e) {
-            throw new IllegalStateException("Некоректні тестові дані: " + e.getMessage());
-        }
+        return new Booking[] {
+            new Booking(1, "Олена Коваль",
+                    new IntercityTrip(1, "Чернівці — Київ", LocalDateTime.of(2026, 11, 3, 7, 30), 780), 1),
+            new Booking(2, "Андрій Бойко",
+                    new IntercityTrip(2, "Чернівці — Львів", LocalDateTime.of(2026, 11, 3, 9, 15), 450, false), 6),
+            new Booking(3, "Ірина Мельник",
+                    new InternationalTrip(3, "Чернівці — Сучава", LocalDateTime.of(2026, 11, 4, 6, 0), 620, "Румунія"), 2),
+            new Booking(4, "Петро Шевчук",
+                    new SuburbanTrip(4, "Чернівці — Сторожинець", LocalDateTime.of(2026, 11, 3, 16, 40), 65, 12), 1)
+        };
     }
 }

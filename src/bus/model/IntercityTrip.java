@@ -1,22 +1,18 @@
 package bus.model;
 
 import java.time.LocalDateTime;
-import java.util.Objects;
-
-import bus.exception.InvalidPriceException;
 
 public sealed class IntercityTrip extends Trip permits InternationalTrip {
     private final boolean wifi;
 
-    public IntercityTrip(String route, LocalDateTime departureTime, double price, boolean wifi)
-            throws InvalidPriceException {
-        super(route, departureTime, price);
+    public IntercityTrip(long id, String route, LocalDateTime departureTime, double price, boolean wifi) {
+        super(id, route, departureTime, price);
         this.wifi = wifi;
         trace("2. IntercityTrip: wifi = " + wifi);
     }
 
-    public IntercityTrip(String route, LocalDateTime departureTime, double price) throws InvalidPriceException {
-        this(route, departureTime, price, true);
+    public IntercityTrip(long id, String route, LocalDateTime departureTime, double price) {
+        this(id, route, departureTime, price, true);
     }
 
     public boolean hasWifi() {
@@ -36,19 +32,5 @@ public sealed class IntercityTrip extends Trip permits InternationalTrip {
     @Override
     public String toString() {
         return super.toString() + (wifi ? ", Wi-Fi" : ", без Wi-Fi");
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (!super.equals(obj)) {
-            return false;
-        }
-        IntercityTrip other = (IntercityTrip) obj;
-        return wifi == other.wifi;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), wifi);
     }
 }

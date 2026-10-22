@@ -1,100 +1,74 @@
-# ЛР №6. Реалізація ієрархії класів на основі наслідування
+# ЛР №7–9. Типізований CRUD-сервіс: узагальнення, колекції, сортування
 
 **Тема проєкту №14 — система бронювання квитків на автобус.**
 
-## Предметна область
+## Сутності
 
-До ЛР №5 рейс у бронюванні був просто рядком `route` і числом `pricePerSeat`, тож усі рейси поводилися однаково. Але автовокзал продає квитки на різні види рейсів: приміські (багато зупинок, мало багажу, квиток у водія), міжміські (Wi-Fi, більше багажу) і міжнародні (перетин кордону, закордонний паспорт, прикордонний збір). У ЛР №6 рейс винесено в окрему ієрархію класів, а `Booking` тепер містить об'єкт `Trip`.
+Дві сутності, обидві успадковують `BaseEntity`:
 
-## Ієрархія
+| Сутність | `name` у `BaseEntity` | Власні поля |
+|---|---|---|
+| `Trip` (ієрархія з ЛР6: `SuburbanTrip`, `IntercityTrip`, `InternationalTrip`) | маршрут | `departureTime`, `price` + поля підкласів |
+| `Booking` | ім'я пасажира | `trip`, `seats`, `status` |
 
-Перевірка «is-a»:
-- приміський рейс **є** рейсом;
-- міжміський рейс **є** рейсом;
-- міжнародний рейс **є** міжміським рейсом (далекий маршрут, той самий автобус і умови, плюс кордон).
+## Нові класи
 
-```mermaid
-classDiagram
-    class Trip {
-        <<abstract, sealed>>
-        -String route
-        -LocalDateTime departureTime
-        -double price
-        #Trip(route, departureTime, price)
-        +getPrice() double  «final»
-        +getExtraFee() double
-        +getFinalPrice() double  «final»
-        +requiresPassport() boolean
-        +getTypeName()* String
-        +getBaggageAllowanceKg()* int
-    }
-    class SuburbanTrip {
-        <<final>>
-        -int stopsCount
-    }
-    class IntercityTrip {
-        <<sealed>>
-        -boolean wifi
-        +IntercityTrip(route, departureTime, price, wifi)
-        +IntercityTrip(route, departureTime, price)
-    }
-    class InternationalTrip {
-        <<final>>
-        -String country
-        -double borderFee
-        +InternationalTrip(route, departureTime, price, wifi, country, borderFee)
-        +InternationalTrip(route, departureTime, price, country)
-    }
-    class Booking {
-        -String passengerName
-        -Trip trip
-        -int seats
-        -BookingStatus status
-    }
-    Trip <|-- SuburbanTrip
-    Trip <|-- IntercityTrip
-    IntercityTrip <|-- InternationalTrip
-    Booking o-- Trip : містить
+```
+src/bus/
+├── model/BaseEntity.java                  id, name, equals/hashCode за id
+├── exception/EntityNotFoundException.java
+├── service/
+│   ├── CRUDService.java                   CRUDService<T extends BaseEntity>
+│   ├── InMemoryCrudService.java           реалізація на LinkedHashMap
+│   ├── TripService.java                   findAllSortedByNameAndByDepartureTime()
+│   ├── InMemoryTripService.java
+│   └── EntityComparators.java             компаратори за id та іменем
+├── util/EntityPrinter.java                printAll(Collection<? extends BaseEntity>)
+└── demo/CrudDemo.java                     пункт меню 6
 ```
 
 ## Рівень 1
 
-- Спільні поля `route`, `departureTime`, `price`, конструктор і методи — у `Trip`. У підкласах лише свої поля: `stopsCount`, `wifi`, `country` і `borderFee`. Усі поля `private`: підкласи працюють з ними через гетери, тому базовий клас сам контролює свій стан (наприклад, перевірку ціни).
-- Конструктори підкласів викликають `super(...)`.
-- Кожен підклас перевизначає `getTypeName()`, `getBaggageAllowanceKg()` і `toString()` (через `super.toString()` + свої поля). `InternationalTrip` додатково перевизначає `getExtraFee()` (прикордонний збір) і `requiresPassport()`.
-- Поліморфізм: у `TripDemo` масив `Trip[]` містить об'єкти різних підкласів, і в циклі для кожного викликаються перевизначені методи.
+**BaseEntity.** Абстрактний клас з `long id` і `String name`, обидва `final`: id не змінюється після створення. `Trip` і `Booking` успадковують його й передають id та назву через `super(...)`.
+
+**EntityNotFoundException — неперевірений (`RuntimeException`).** Контракт `CRUDService` обов'язковий і має сигнатуру `T findById(long id)` без `throws`, тому перевірений виняток туди не вписався б. Крім того, пошук неіснуючого id — це помилка того, хто викликає (передав id рейсу, якого немає), а не ситуація, яку кожен виклик зобов'язаний обробляти. Хто хоче — перехоплює його, як у `CrudDemo`. Виняток несе поле `id`.
+
+З тієї ж причини `DomainException` (ЛР3) тепер успадковується від `RuntimeException`: інакше кожне створення рейсу чи бронювання в сервісах і демо обросло б `throws`/`try-catch`. Ієрархія `DomainException → InvalidPriceException / InvalidQuantityException`, повторне збудження і перехоплення в `BookingInputDemo` працюють як раніше.
+
+**Навіщо `T extends BaseEntity`.** Без обмеження `T` був би просто `Object`, і всередині сервісу не можна було б викликати `entity.getId()` (ключ у `save()`) і `getName()` (сортування за іменем). Обмеження гарантує, що будь-яке `T` має id і назву, а `CRUDService<String>` просто не скомпілюється.
+
+**InMemoryCrudService\<T\>.** Один клас без змін працює з обома сутностями: `InMemoryTripService extends InMemoryCrudService<Trip>` і `new InMemoryCrudService<Booking>("Бронювання")`.
+
+**Демо (пункт меню 6):** додавання 5 рейсів; `save()` з наявним id = 2 оновлює рейс (новий час і ціна), кількість лишається 5; `delete(5)` → `true`, повторно → `false`; `findById(999)` → `EntityNotFoundException`.
 
 ## Рівень 2
 
-- **Абстрактний клас.** Просто «рейс» без виду автовокзал не продає, тому `Trip` абстрактний. `getTypeName()` і `getBaggageAllowanceKg()` — абстрактні: у базовому класі для них немає осмисленого значення за замовчуванням (норма багажу різна для кожного виду рейсу), а компілятор змусить кожен новий підклас їх реалізувати.
-- **Три рівні.** `Trip → IntercityTrip → InternationalTrip`. Ланцюжок конструкторів видно в пункті меню 5: спочатку відпрацьовує `Trip`, потім `IntercityTrip`, потім `InternationalTrip`. Так відбувається, тому що першим рядком кожного конструктора є `super(...)`: об'єкт будується від базового класу до похідного, і підклас отримує вже ініціалізовану базову частину. Повідомлення друкуються лише в демо (`Trip.setTraceConstructors(true)`), щоб не засмічувати решту виводу.
-- **this(...).** `IntercityTrip(route, departureTime, price)` → `this(..., true)` (у міжміських автобусах Wi-Fi є за замовчуванням), `InternationalTrip(route, departureTime, price, country)` → `this(..., true, country, DEFAULT_BORDER_FEE)`. Ініціалізація пишеться один раз — у повному конструкторі.
-- **final.** `getPrice()` і `getFinalPrice()` — `final`: базова ціна квитка і формула «ціна + збори» однакові для всіх рейсів, підклас може лише додати свій збір через `getExtraFee()`, а не підмінити сам розрахунок. `SuburbanTrip` і `InternationalTrip` — `final`-класи: у домені в них немає підвидів.
-- **instanceof.** Через посилання `Trip` специфічні методи (`getCountry()`, `getStopsCount()`, `hasWifi()`) недоступні. Статичний (оголошений) тип змінної — `Trip`, він визначає, які методи можна викликати на етапі компіляції. Динамічний (фактичний) тип — клас створеного об'єкта, він визначає, яка реалізація перевизначеного методу виконається. Pattern matching `if (trip instanceof InternationalTrip international)` перевіряє фактичний тип і одразу дає змінну потрібного типу; для `IntercityTrip` показано явне приведення типу.
+**findAllSortedByName() — через Comparator.** Сутностей дві, а порядків сортування кілька (за маршрутом, за маршрутом і часом, за id, за сумою бронювання). `Comparable` дає лише один «природний» порядок, вшитий у клас, і для `Trip` його довелося б оголосити в абстрактному класі або в `BaseEntity`. `Comparator` описується окремо, комбінується (`thenComparing`) і може бути спільним для різних типів. Порівняння назв іде через `Collator` з українською локаллю: звичайний `String.compareTo()` порівнює коди символів і ставить «Є», «І», «Ї», «Ґ» не на свої місця за абеткою.
+
+**TripService.** `findAllSortedByNameAndByDepartureTime()` залежить від поля `departureTime`, яке є лише в `Trip`, тому метод не в загальному `CRUDService<T>`, а в окремому `TripService extends CRUDService<Trip>`. Реалізація — `InMemoryTripService extends InMemoryCrudService<Trip> implements TripService`: спочатку за маршрутом, при збігу — за часом відправлення. Тут теж `Comparator`, бо це другий, додатковий порядок для рейсів.
+
+**Сортування не змінює сховище.** `findAllSorted()` копіює значення в новий `ArrayList` і сортує копію. У демо є два рейси «Чернівці — Київ» (07:30 і 21:45), причому вечірній додано першим. Після `findAllSortedByName()` вони стоять разом, але в порядку додавання; після `findAllSortedByNameAndByDepartureTime()` ранковий іде перед вечірнім. Список виводиться до сортування, після обох сортувань і ще раз — щоб показати, що порядок у сховищі той самий.
+
+**Вибір колекції — `LinkedHashMap<Long, T>`.**
+
+| Колекція | findById | save (додати / оновити) | delete | Відсортований список |
+|---|---|---|---|---|
+| `ArrayList<T>` | O(n) — перебір | O(n) — спершу пошук за id | O(n) | O(n log n) |
+| `HashMap<Long, T>` | O(1) | O(1) | O(1) | O(n log n) |
+| `LinkedHashMap<Long, T>` | O(1) | O(1) | O(1) | O(n log n) |
+| `TreeMap<Long, T>` | O(log n) | O(log n) | O(log n) | O(n log n) (сортований лише за id) |
+
+Основні операції сервісу йдуть за id, тому потрібна мапа з ключем id. `ArrayList` на кожен `save` і `findById` перебирає список. `TreeMap` тримає порядок за id, але нам потрібні сортування за маршрутом і часом, тож це не допомагає. Між `HashMap` і `LinkedHashMap` обрано другий: та ж складність, але зберігає порядок додавання, тому вивід «до сортування» передбачуваний.
+
+**equals()/hashCode() за id.** Перевизначені в `BaseEntity` як `final`, щоб підкласи не порушили правило «та сама сутність = той самий id». Порівняння полів з ЛР6 у `Trip` і `Booking` прибрано: рейс, у якого змінили час відправлення, лишається тим самим рейсом (демо в пункті 5). `getClass()` гарантує, що рейс і бронювання з однаковим id не рівні.
+
+**Узгодженість з equals.** Компаратор за маршрутом не узгоджений з `equals`: два різні рейси «Чернівці — Київ» (id 1 і 3) порівнюються як 0, але `equals` дає `false`. `Comparable<Booking>` (за сумою, з ЛР4) так само неузгоджений. Для `List.sort()` це не проблема. Але в `TreeSet`/`TreeMap` з таким компаратором один із «рівних» за компаратором рейсів просто пропав би, бо ці колекції вважають об'єкти однаковими за `compare() == 0`, а не за `equals()`. Тому для сховища використано мапу за id, а сортування робиться лише в нових списках.
 
 ## Рівень 3
 
-### equals() і hashCode()
-Кожен клас ієрархії перевизначає `equals()`/`hashCode()`, підкласи додають свої поля до порівняння базового класу.
+**`findAllSorted(Comparator<? super T>)`.** Узагальнений метод у `CRUDService`. Через нього реалізовані обидва сортування, а `findAllSortedByName()` став default-методом інтерфейсу. Параметр має тип `Comparator<? super T>`, бо компаратор, що вміє порівнювати будь-яку `BaseEntity`, вміє порівнювати й `Trip`. З `Comparator<T>` у `CRUDService<Trip>` не можна було б передати `Comparator<BaseEntity>`, хоча він підходить. У демо один `EntityComparators.BY_ID.reversed()` типу `Comparator<BaseEntity>` сортує і рейси, і бронювання.
 
-Використано `getClass()`, а не `instanceof`. Демо (пункт меню 5) порівнює міжміський рейс «Чернівці — Сучава» і міжнародний рейс з тими самими маршрутом, часом, ціною, Wi-Fi і нульовим збором:
-
-| Підхід | `trip.equals(internationalTrip)` | `internationalTrip.equals(trip)` |
-|---|---|---|
-| `getClass()` (обрано) | false | false |
-| `instanceof` | true | false |
-
-З `instanceof` у `IntercityTrip.equals()` міжнародний рейс «є» `IntercityTrip` і порівнюється як рівний, а `InternationalTrip.equals()` міжміський рейс відкидає — симетрія порушена, і, наприклад, `HashSet` поводитиметься непередбачувано. `getClass()` вважає рівними лише об'єкти одного класу, тому симетрія зберігається. Це правильно і за змістом: рейс із перетином кордону — інший рейс, навіть якщо маршрут той самий.
-
-### Композиція замість наслідування
-`Booking` **містить** `Trip`, а не успадковує його. Твердження «бронювання є рейсом» хибне. Якби `Booking extends Trip`, кожне бронювання було б окремим рейсом: десять пасажирів одного автобуса означали б десять різних «рейсів» з копіями маршруту, часу й ціни, і зміна часу відправлення не потрапила б у вже створені бронювання. До того ж для кожного виду рейсу довелося б робити свій клас бронювання (`SuburbanBooking`, `InternationalBooking`...). Через композицію багато бронювань посилаються на один об'єкт `Trip`, а вартість рахується через делегування: `seats * trip.getFinalPrice()`.
-
-### sealed і switch з pattern matching
-`Trip` — `sealed ... permits SuburbanTrip, IntercityTrip`, `IntercityTrip` — `sealed ... permits InternationalTrip`. Компілятор знає повний список підкласів, тому `switch` у `TripDemo.describeDocuments()` перевіряється на вичерпність без `default`: якщо додати новий підклас у `permits` і не обробити його у `switch`, код не скомпілюється. Відкриту ієрархію хтось міг би розширити будь-де, і `switch` тоді потребував би `default`.
-
-## Інші зміни
-- Перевірка ціни (`InvalidPriceException`) переїхала з `Booking` у конструктор `Trip`.
-- Тарифи (ЛР4–5) рахують від ціни квитка зі зборами (`getFinalPrice()`), а каса нагадує про закордонний паспорт для міжнародних рейсів.
+**`printAll(Collection<? extends BaseEntity>)`.** Generics інваріантні: `List<Trip>` не є `List<BaseEntity>`. Якби це було дозволено, через посилання `List<BaseEntity>` у список рейсів можна було б додати `Booking`. Wildcard `? extends BaseEntity` дозволяє лише читати елементи як `BaseEntity` і не дозволяє додавати, тому туди безпечно передавати і `List<Trip>`, і `List<Booking>`.
 
 ## Запуск
 
@@ -103,4 +77,4 @@ javac -d out $(find src -name "*.java")
 java -cp out bus.Main
 ```
 
-Новий пункт меню: `5` — ієрархія рейсів (поліморфізм, конструктори, instanceof, equals, композиція).
+Новий пункт меню: `6` — CRUD-сервіс у пам'яті.

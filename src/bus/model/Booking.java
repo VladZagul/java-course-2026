@@ -2,26 +2,23 @@ package bus.model;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 import bus.exception.InvalidQuantityException;
 import bus.observer.BookingObserver;
 
-public class Booking implements Payable, Comparable<Booking> {
-    private String passengerName;
-    private Trip trip;
-    private int seats;
+public class Booking extends BaseEntity implements Payable, Comparable<Booking> {
+    private final Trip trip;
+    private final int seats;
     private BookingStatus status = BookingStatus.NEW;
     private final List<BookingObserver> observers = new ArrayList<>();
 
-    public Booking(String passengerName, Trip trip, int seats) throws InvalidQuantityException {
+    public Booking(long id, String passengerName, Trip trip, int seats) {
+        super(id, passengerName);
         if (seats <= 0) {
             throw new InvalidQuantityException(
                 "Кількість місць має бути додатньою, отримано: " + seats, seats
             );
         }
-
-        this.passengerName = passengerName;
         this.trip = trip;
         this.seats = seats;
     }
@@ -61,7 +58,7 @@ public class Booking implements Payable, Comparable<Booking> {
     }
 
     public String getPassengerName() {
-        return passengerName;
+        return getName();
     }
 
     public Trip getTrip() {
@@ -88,27 +85,8 @@ public class Booking implements Payable, Comparable<Booking> {
     @Override
     public String toString() {
         return String.format(
-            "Пасажир: %-15s Рейс: %-24s Місць: %-3d Ціна: %-8.2f Сума: %-9.2f Статус: %s",
-            passengerName, trip.getRoute(), seats, trip.getFinalPrice(), getTotalCost(), status.getTitle()
+            "#%-3d Пасажир: %-15s Рейс: %-24s Місць: %-3d Ціна: %-8.2f Сума: %-9.2f Статус: %s",
+            getId(), getName(), trip.getRoute(), seats, trip.getFinalPrice(), getTotalCost(), status.getTitle()
         );
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) {
-            return true;
-        }
-        if (obj == null || getClass() != obj.getClass()) {
-            return false;
-        }
-        Booking other = (Booking) obj;
-        return seats == other.seats
-                && passengerName.equals(other.passengerName)
-                && trip.equals(other.trip);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(passengerName, trip, seats);
     }
 }

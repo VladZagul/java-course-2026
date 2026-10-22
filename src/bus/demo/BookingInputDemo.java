@@ -61,7 +61,7 @@ public class BookingInputDemo {
             }
 
             try {
-                bookings[i] = createBookingWithLogging(passengerName, route, seats, pricePerSeat);
+                bookings[i] = createBookingWithLogging(i + 1, passengerName, route, seats, pricePerSeat);
             } catch (InvalidQuantityException e) {
                 System.out.println("Некоректна кількість місць (" + e.getInvalidValue() + "): " + e.getMessage());
                 i--;
@@ -129,12 +129,12 @@ public class BookingInputDemo {
         return bookings;
     }
 
-    private static Booking createBookingWithLogging(String passengerName, String route, int seats, double pricePerSeat)
-            throws DomainException {
+    private static Booking createBookingWithLogging(long id, String passengerName, String route, int seats,
+            double pricePerSeat) throws DomainException {
         try {
             LocalDateTime departure = LocalDate.now().plusDays(1).atTime(8, 0);
-            Trip trip = new IntercityTrip(route, departure, pricePerSeat);
-            return new Booking(passengerName, trip, seats);
+            Trip trip = new IntercityTrip(id, route, departure, pricePerSeat);
+            return new Booking(id, passengerName, trip, seats);
         } catch (InvalidPriceException | InvalidQuantityException e) {
             System.out.println("[LOG] Під час створення бронювання сталася помилка: " + e.getMessage());
             throw e;
