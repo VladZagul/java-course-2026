@@ -1,3 +1,4 @@
+import java.util.Arrays;
 import java.util.InputMismatchException;
 import java.util.Scanner;
 
@@ -6,60 +7,64 @@ public class Main {
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
         try {
-            runOrderProcessing(scanner);
+            Booking[] bookings = runBookingProcessing(scanner);
+            runFareDemo(scanner, bookings);
         } finally {
             System.out.println("\nРоботу програми завершено.");
             scanner.close();
         }
     }
 
-    private static void runOrderProcessing(Scanner scanner) {
-
+    private static Booking[] runBookingProcessing(Scanner scanner) {
         int n = 0;
         boolean validCount = false;
         while (!validCount) {
-            System.out.print("Скільки замовлень введемо? ");
+            System.out.print("Скільки бронювань введемо? ");
             try {
                 n = scanner.nextInt();
                 scanner.nextLine();
-                validCount = true;
+                if (n > 0) {
+                    validCount = true;
+                } else {
+                    System.out.println("Кількість бронювань має бути більшою за нуль.");
+                }
             } catch (InputMismatchException e) {
                 System.out.println("Помилка: потрібно ввести ціле число. Спробуйте ще раз.");
                 scanner.nextLine();
             }
         }
 
-        Order[] orders = new Order[n];
+        Booking[] bookings = new Booking[n];
 
         for (int i = 0; i < n; i++) {
-            System.out.println("Замовлення #" + (i + 1) + ":");
+            System.out.println("Бронювання #" + (i + 1) + ":");
 
-            System.out.print("  Ім'я клієнта: ");
-            String customerName = scanner.nextLine();
+            System.out.print("  Ім'я пасажира: ");
+            String passengerName = scanner.nextLine();
 
-            System.out.print("  Назва товару: ");
-            String itemName = scanner.nextLine();
+            System.out.print("  Маршрут: ");
+            String route = scanner.nextLine();
 
-            int quantity = 0;
-            double pricePerUnit = 0;
+            int seats = 0;
+            double pricePerSeat = 0;
             try {
-                System.out.print("  Кількість: ");
-                quantity = scanner.nextInt();
+                System.out.print("  Кількість місць: ");
+                seats = scanner.nextInt();
 
-                System.out.print("  Ціна за одиницю: ");
-                pricePerUnit = scanner.nextDouble();
+                System.out.print("  Ціна місця: ");
+                pricePerSeat = scanner.nextDouble();
                 scanner.nextLine();
             } catch (InputMismatchException e) {
-                System.out.println("Помилка: кількість і ціна мають бути числами. Це замовлення пропущено.");
+                System.out.println("Помилка: кількість місць і ціна мають бути числами. Це бронювання пропущено.");
                 scanner.nextLine();
-                i--; 
+                i--;
                 continue;
             }
 
             try {
-                orders[i] = createOrderWithLogging(customerName, itemName, quantity, pricePerUnit);
+                bookings[i] = createBookingWithLogging(passengerName, route, seats, pricePerSeat);
             } catch (InvalidQuantityException e) {
-                System.out.println("Некоректна кількість (" + e.getInvalidValue() + "): " + e.getMessage());
+                System.out.println("Некоректна кількість місць (" + e.getInvalidValue() + "): " + e.getMessage());
                 i--;
             } catch (InvalidPriceException e) {
                 System.out.println("Некоректна ціна (" + e.getInvalidValue() + "): " + e.getMessage());
@@ -71,18 +76,18 @@ public class Main {
         }
 
         System.out.println();
-        System.out.println("===== Усі замовлення =====");
-        for (Order order : orders) {
-            System.out.println(order);
+        System.out.println("===== Усі бронювання =====");
+        for (Booking booking : bookings) {
+            System.out.println(booking);
         }
 
-        System.out.print("\nНа скільки клієнтів розділити загальну суму (для середнього)? ");
+        System.out.print("\nНа скільки пасажирів розділити загальну суму (для середнього)? ");
         try {
             int divisor = scanner.nextInt();
             scanner.nextLine();
             int totalCostInt = 0;
-            for (Order order : orders) {
-                totalCostInt += (int) order.getTotalCost();
+            for (Booking booking : bookings) {
+                totalCostInt += (int) booking.getTotalCost();
             }
             int average = totalCostInt / divisor;
             System.out.println("Середня сума (ціла): " + average);
@@ -93,18 +98,17 @@ public class Main {
             scanner.nextLine();
         }
 
-        System.out.print("\nВведіть індекс замовлення для перегляду: ");
+        System.out.print("\nВведіть індекс бронювання для перегляду: ");
         try {
             int index = scanner.nextInt();
             scanner.nextLine();
-            Order selected = orders[index]; 
-            System.out.println("Обране замовлення: " + selected);
+            Booking selected = bookings[index];
+            System.out.println("Обране бронювання: " + selected);
         } catch (InputMismatchException e) {
-
             System.out.println("Помилка: індекс має бути цілим числом.");
             scanner.nextLine();
         } catch (ArrayIndexOutOfBoundsException e) {
-            System.out.println("Помилка: такого індексу немає в масиві (допустимо 0.." + (orders.length - 1) + ").");
+            System.out.println("Помилка: такого індексу немає в масиві (допустимо 0.." + (bookings.length - 1) + ").");
         } catch (Exception e) {
             System.out.println("Непередбачена помилка: " + e.getMessage());
         }
@@ -112,7 +116,7 @@ public class Main {
         System.out.println("\n--- Демонстрація ієрархії власних винятків ---");
         DomainException[] demoExceptions = {
             new InvalidPriceException("демо: від'ємна ціна", -5.0),
-            new InvalidQuantityException("демо: нульова кількість", 0)
+            new InvalidQuantityException("демо: нуль місць", 0)
         };
         for (DomainException demo : demoExceptions) {
             try {
@@ -122,14 +126,86 @@ public class Main {
                         + e.getClass().getSimpleName() + " | " + e.getMessage());
             }
         }
+
+        return bookings;
     }
 
-    private static Order createOrderWithLogging(String customerName, String itemName, int quantity, double pricePerUnit)
+    private static void runFareDemo(Scanner scanner, Booking[] bookings) {
+        System.out.println("\n===== Тарифи =====");
+        Booking booking = bookings[0];
+        System.out.println("Бронювання: " + booking);
+
+        Fare[] fares = {
+            new FullFare(),
+            new StudentFare(),
+            new ChildFare(),
+            new GroupFare()
+        };
+        for (Fare fare : fares) {
+            System.out.println(fare.describe(booking));
+        }
+
+        System.out.println("\n===== Бронювання, відсортовані за сумою (Comparable) =====");
+        Booking[] sorted = Arrays.copyOf(bookings, bookings.length);
+        Arrays.sort(sorted);
+        for (Booking b : sorted) {
+            System.out.println(b);
+        }
+
+        Payable[] payables = bookings;
+        double total = 0;
+        for (Payable payable : payables) {
+            total += payable.getTotalCost();
+        }
+        System.out.printf("Загальна сума всіх бронювань: %.2f грн%n", total);
+
+        System.out.println("\n===== Каса (Strategy) =====");
+        TicketDesk desk = new TicketDesk(new FullFare());
+        desk.printTicket(booking);
+
+        boolean running = true;
+        while (running) {
+            System.out.print("\nЗмінити тариф (1 - повний, 2 - студентський, 3 - дитячий, 4 - груповий, 0 - завершити): ");
+            int choice;
+            try {
+                choice = scanner.nextInt();
+                scanner.nextLine();
+            } catch (InputMismatchException e) {
+                System.out.println("Потрібно ввести число.");
+                scanner.nextLine();
+                continue;
+            }
+
+            switch (choice) {
+                case 1:
+                    desk.setFare(new FullFare());
+                    break;
+                case 2:
+                    desk.setFare(new StudentFare());
+                    break;
+                case 3:
+                    desk.setFare(new ChildFare());
+                    break;
+                case 4:
+                    desk.setFare(new GroupFare());
+                    break;
+                case 0:
+                    running = false;
+                    continue;
+                default:
+                    System.out.println("Немає такого тарифу.");
+                    continue;
+            }
+            desk.printTicket(booking);
+        }
+    }
+
+    private static Booking createBookingWithLogging(String passengerName, String route, int seats, double pricePerSeat)
             throws DomainException {
         try {
-            return new Order(customerName, itemName, quantity, pricePerUnit);
+            return new Booking(passengerName, route, seats, pricePerSeat);
         } catch (InvalidPriceException | InvalidQuantityException e) {
-            System.out.println("[LOG] Під час створення замовлення сталася помилка: " + e.getMessage());
+            System.out.println("[LOG] Під час створення бронювання сталася помилка: " + e.getMessage());
             throw e;
         }
     }
