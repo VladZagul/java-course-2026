@@ -26,6 +26,9 @@ public class TicketDesk {
         System.out.println("----- Квиток -----");
         System.out.println(booking);
         System.out.println("Тариф: " + fare.getName() + (fare.requiresDocument() ? " (пред'явіть документ)" : ""));
+        if (booking.getTrip().requiresPassport()) {
+            System.out.println("Для посадки потрібен закордонний паспорт");
+        }
         System.out.printf("До сплати: %.2f грн%n", calculateTotal(booking));
     }
 }

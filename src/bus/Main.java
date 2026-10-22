@@ -1,12 +1,17 @@
 package bus;
 
+import java.time.LocalDateTime;
 import java.util.Scanner;
 
 import bus.demo.BookingInputDemo;
 import bus.demo.FareDemo;
 import bus.demo.StatusDemo;
+import bus.demo.TripDemo;
 import bus.exception.DomainException;
 import bus.model.Booking;
+import bus.model.IntercityTrip;
+import bus.model.InternationalTrip;
+import bus.model.SuburbanTrip;
 
 public class Main {
 
@@ -31,6 +36,9 @@ public class Main {
                     case "4":
                         StatusDemo.run(bookings);
                         break;
+                    case "5":
+                        TripDemo.run();
+                        break;
                     case "0":
                         running = false;
                         break;
@@ -50,6 +58,7 @@ public class Main {
         System.out.println("2 - Показати бронювання");
         System.out.println("3 - Тарифи: Strategy, Factory, Adapter (ЛР4-5)");
         System.out.println("4 - Статуси бронювань: Observer (ЛР5)");
+        System.out.println("5 - Ієрархія рейсів (ЛР6)");
         System.out.println("0 - Вихід");
         System.out.print("Ваш вибір: ");
     }
@@ -64,9 +73,14 @@ public class Main {
     private static Booking[] createSampleBookings() {
         try {
             return new Booking[] {
-                new Booking("Олена Коваль", "Чернівці — Київ", 1, 780.0),
-                new Booking("Андрій Бойко", "Чернівці — Львів", 6, 450.0),
-                new Booking("Ірина Мельник", "Чернівці — Сучава", 2, 620.0)
+                new Booking("Олена Коваль",
+                        new IntercityTrip("Чернівці — Київ", LocalDateTime.of(2026, 11, 3, 7, 30), 780), 1),
+                new Booking("Андрій Бойко",
+                        new IntercityTrip("Чернівці — Львів", LocalDateTime.of(2026, 11, 3, 9, 15), 450, false), 6),
+                new Booking("Ірина Мельник",
+                        new InternationalTrip("Чернівці — Сучава", LocalDateTime.of(2026, 11, 4, 6, 0), 620, "Румунія"), 2),
+                new Booking("Петро Шевчук",
+                        new SuburbanTrip("Чернівці — Сторожинець", LocalDateTime.of(2026, 11, 3, 16, 40), 65, 12), 1)
             };
         } catch (DomainException e) {
             throw new IllegalStateException("Некоректні тестові дані: " + e.getMessage());

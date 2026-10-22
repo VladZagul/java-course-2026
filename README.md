@@ -1,68 +1,106 @@
-# ЛР №5. Рефакторинг із застосуванням паттернів проєктування
+# ЛР №6. Реалізація ієрархії класів на основі наслідування
 
 **Тема проєкту №14 — система бронювання квитків на автобус.**
 
-## Сутність
+## Предметна область
 
-`Booking` (бронювання): пасажир, маршрут, кількість місць, ціна місця, статус (`BookingStatus`). Тарифи — з ЛР №4, власні винятки — з ЛР №3.
+До ЛР №5 рейс у бронюванні був просто рядком `route` і числом `pricePerSeat`, тож усі рейси поводилися однаково. Але автовокзал продає квитки на різні види рейсів: приміські (багато зупинок, мало багажу, квиток у водія), міжміські (Wi-Fi, більше багажу) і міжнародні (перетин кордону, закордонний паспорт, прикордонний збір). У ЛР №6 рейс винесено в окрему ієрархію класів, а `Booking` тепер містить об'єкт `Trip`.
 
-## Структура проєкту
+## Ієрархія
 
-Під час рефакторингу класи з кореня репозиторію рознесено по пакетах:
+Перевірка «is-a»:
+- приміський рейс **є** рейсом;
+- міжміський рейс **є** рейсом;
+- міжнародний рейс **є** міжміським рейсом (далекий маршрут, той самий автобус і умови, плюс кордон).
 
+```mermaid
+classDiagram
+    class Trip {
+        <<abstract, sealed>>
+        -String route
+        -LocalDateTime departureTime
+        -double price
+        #Trip(route, departureTime, price)
+        +getPrice() double  «final»
+        +getExtraFee() double
+        +getFinalPrice() double  «final»
+        +requiresPassport() boolean
+        +getTypeName()* String
+        +getBaggageAllowanceKg()* int
+    }
+    class SuburbanTrip {
+        <<final>>
+        -int stopsCount
+    }
+    class IntercityTrip {
+        <<sealed>>
+        -boolean wifi
+        +IntercityTrip(route, departureTime, price, wifi)
+        +IntercityTrip(route, departureTime, price)
+    }
+    class InternationalTrip {
+        <<final>>
+        -String country
+        -double borderFee
+        +InternationalTrip(route, departureTime, price, wifi, country, borderFee)
+        +InternationalTrip(route, departureTime, price, country)
+    }
+    class Booking {
+        -String passengerName
+        -Trip trip
+        -int seats
+        -BookingStatus status
+    }
+    Trip <|-- SuburbanTrip
+    Trip <|-- IntercityTrip
+    IntercityTrip <|-- InternationalTrip
+    Booking o-- Trip : містить
 ```
-src/bus/
-├── Main.java                 меню програми
-├── model/                    Booking, BookingStatus, Payable
-├── exception/                DomainException та підкласи (ЛР3)
-├── fare/                     Fare та тарифи (ЛР4), FareFactory, BenefitFareAdapter
-│   └── external/             StateBenefitSystem — «зовнішня система»
-├── desk/                     TicketDesk — каса, контекст Strategy (ЛР4)
-├── observer/                 BookingObserver та спостерігачі
-└── demo/                     сценарії з консольним введенням для меню
-```
 
-Сценарій із ЛР №1–3 (введення бронювань з обробкою винятків) перенесено без змін у `BookingInputDemo`, сценарій ЛР №4 — у `FareDemo`. `Main` тепер показує меню, а на старті має три тестові бронювання, щоб інші пункти можна було запускати без ручного введення.
+## Рівень 1
 
-## Рівень 1 — Factory Method
+- Спільні поля `route`, `departureTime`, `price`, конструктор і методи — у `Trip`. У підкласах лише свої поля: `stopsCount`, `wifi`, `country` і `borderFee`. Усі поля `private`: підкласи працюють з ними через гетери, тому базовий клас сам контролює свій стан (наприклад, перевірку ціни).
+- Конструктори підкласів викликають `super(...)`.
+- Кожен підклас перевизначає `getTypeName()`, `getBaggageAllowanceKg()` і `toString()` (через `super.toString()` + свої поля). `InternationalTrip` додатково перевизначає `getExtraFee()` (прикордонний збір) і `requiresPassport()`.
+- Поліморфізм: у `TripDemo` масив `Trip[]` містить об'єкти різних підкласів, і в циклі для кожного викликаються перевизначені методи.
 
-**Проблема.** У ЛР №4 тарифи створювалися через `new` у двох місцях `Main`: при заповненні масиву для порівняння і в `switch` під час вибору тарифу в касі. Щоб додати новий тариф, треба було правити обидва місця й не забути жодне.
+## Рівень 2
 
-**Рішення.** `FareFactory.create(String code)` за кодом (`full`, `student`, `child`, `group`, `benefit`) повертає готовий тариф, а `createAll()` — по одному тарифу кожного типу. Клієнтський код (`FareDemo`) більше не знає конкретних класів і не містить `new` для тарифів. Невідомий код → `IllegalArgumentException`.
+- **Абстрактний клас.** Просто «рейс» без виду автовокзал не продає, тому `Trip` абстрактний. `getTypeName()` і `getBaggageAllowanceKg()` — абстрактні: у базовому класі для них немає осмисленого значення за замовчуванням (норма багажу різна для кожного виду рейсу), а компілятор змусить кожен новий підклас їх реалізувати.
+- **Три рівні.** `Trip → IntercityTrip → InternationalTrip`. Ланцюжок конструкторів видно в пункті меню 5: спочатку відпрацьовує `Trip`, потім `IntercityTrip`, потім `InternationalTrip`. Так відбувається, тому що першим рядком кожного конструктора є `super(...)`: об'єкт будується від базового класу до похідного, і підклас отримує вже ініціалізовану базову частину. Повідомлення друкуються лише в демо (`Trip.setTraceConstructors(true)`), щоб не засмічувати решту виводу.
+- **this(...).** `IntercityTrip(route, departureTime, price)` → `this(..., true)` (у міжміських автобусах Wi-Fi є за замовчуванням), `InternationalTrip(route, departureTime, price, country)` → `this(..., true, country, DEFAULT_BORDER_FEE)`. Ініціалізація пишеться один раз — у повному конструкторі.
+- **final.** `getPrice()` і `getFinalPrice()` — `final`: базова ціна квитка і формула «ціна + збори» однакові для всіх рейсів, підклас може лише додати свій збір через `getExtraFee()`, а не підмінити сам розрахунок. `SuburbanTrip` і `InternationalTrip` — `final`-класи: у домені в них немає підвидів.
+- **instanceof.** Через посилання `Trip` специфічні методи (`getCountry()`, `getStopsCount()`, `hasWifi()`) недоступні. Статичний (оголошений) тип змінної — `Trip`, він визначає, які методи можна викликати на етапі компіляції. Динамічний (фактичний) тип — клас створеного об'єкта, він визначає, яка реалізація перевизначеного методу виконається. Pattern matching `if (trip instanceof InternationalTrip international)` перевіряє фактичний тип і одразу дає змінну потрібного типу; для `IntercityTrip` показано явне приведення типу.
 
-**Результат.** Новий тариф додається в одному місці — у фабриці. Так і було з державною пільгою: вона з'явилася і в порівнянні, і в касі без жодної правки `FareDemo`.
+## Рівень 3
 
-## Рівень 2 — Observer
+### equals() і hashCode()
+Кожен клас ієрархії перевизначає `equals()`/`hashCode()`, підкласи додають свої поля до порівняння базового класу.
 
-Зміна статусу бронювання (`Створене → Оплачене → Посадка → Поїздка завершена` або `Скасоване`) має сповіщати інші частини системи.
+Використано `getClass()`, а не `instanceof`. Демо (пункт меню 5) порівнює міжміський рейс «Чернівці — Сучава» і міжнародний рейс з тими самими маршрутом, часом, ціною, Wi-Fi і нульовим збором:
 
-- `BookingObserver` — інтерфейс спостерігача з методом `onStatusChanged(booking, oldStatus, newStatus)`.
-- `Booking` — суб'єкт: зберігає список спостерігачів, має `addObserver()`, `removeObserver()`, а `setStatus()` сповіщає всіх підписників.
-- Спостерігачі: `BookingLogger` (журнал змін), `PassengerNotifier` (SMS пасажиру), `SalesReport` (продані місця, скасування, виручка; при скасуванні оплаченого бронювання гроші повертаються).
+| Підхід | `trip.equals(internationalTrip)` | `internationalTrip.equals(trip)` |
+|---|---|---|
+| `getClass()` (обрано) | false | false |
+| `instanceof` | true | false |
 
-У `StatusDemo` три спостерігачі підписані на ті самі бронювання. Перший пасажир після оплати відмовляється від SMS: `PassengerNotifier` відписується, і далі зміни його статусу потрапляють тільки в журнал і звіт. `Booking` нічого не знає про конкретні класи спостерігачів, тому новий підписник (наприклад, email або диспетчер автовокзалу) додається без змін у `Booking`.
+З `instanceof` у `IntercityTrip.equals()` міжнародний рейс «є» `IntercityTrip` і порівнюється як рівний, а `InternationalTrip.equals()` міжміський рейс відкидає — симетрія порушена, і, наприклад, `HashSet` поводитиметься непередбачувано. `getClass()` вважає рівними лише об'єкти одного класу, тому симетрія зберігається. Це правильно і за змістом: рейс із перетином кордону — інший рейс, навіть якщо маршрут той самий.
 
-## Рівень 3 — Adapter
+### Композиція замість наслідування
+`Booking` **містить** `Trip`, а не успадковує його. Твердження «бронювання є рейсом» хибне. Якби `Booking extends Trip`, кожне бронювання було б окремим рейсом: десять пасажирів одного автобуса означали б десять різних «рейсів» з копіями маршруту, часу й ціни, і зміна часу відправлення не потрапила б у вже створені бронювання. До того ж для кожного виду рейсу довелося б робити свій клас бронювання (`SuburbanBooking`, `InternationalBooking`...). Через композицію багато бронювань посилаються на один об'єкт `Trip`, а вартість рахується через делегування: `seats * trip.getFinalPrice()`.
 
-`StateBenefitSystem` змодельовано як «зовнішню» державну систему розрахунку пільг, яку не можна змінювати. Її API несумісне з нашим `Fare`:
+### sealed і switch з pattern matching
+`Trip` — `sealed ... permits SuburbanTrip, IntercityTrip`, `IntercityTrip` — `sealed ... permits InternationalTrip`. Компілятор знає повний список підкласів, тому `switch` у `TripDemo.describeDocuments()` перевіряється на вичерпність без `default`: якщо додати новий підклас у `permits` і не обробити його у `switch`, код не скомпілюється. Відкриту ієрархію хтось міг би розширити будь-де, і `switch` тоді потребував би `default`.
 
-| Наш інтерфейс `Fare` | `StateBenefitSystem` |
-|---|---|
-| `getName()` | `getProgramName()` |
-| `calculateCost(Booking)` → гривні, `double` | `calculatePaymentKopecks(int tickets, long fullPriceKopecks)` → копійки, `long` |
-| `requiresDocument()` | `isCertificateRequired()` |
-
-`BenefitFareAdapter implements Fare` містить об'єкт `StateBenefitSystem` і перекладає виклики: дістає з бронювання кількість місць і ціну, переводить гривні в копійки й назад. Завдяки цьому пільговий тариф працює в касі (`TicketDesk`), у фабриці та в порівнянні тарифів, як і власні тарифи.
-
-**Чому Adapter, а не переписати клас.** Код зовнішньої системи ми не контролюємо: її оновлення затерло б наші правки, а інші програми, що вже користуються її API, зламалися б. Адаптер ізолює всю «трансляцію» в одному класі, а ні зовнішня система, ні наш код, що працює з `Fare`, не змінюються.
+## Інші зміни
+- Перевірка ціни (`InvalidPriceException`) переїхала з `Booking` у конструктор `Trip`.
+- Тарифи (ЛР4–5) рахують від ціни квитка зі зборами (`getFinalPrice()`), а каса нагадує про закордонний паспорт для міжнародних рейсів.
 
 ## Запуск
-
-macOS / Linux:
 
 ```bash
 javac -d out $(find src -name "*.java")
 java -cp out bus.Main
 ```
 
-Пункти меню: `1` — введення бронювань (ЛР1–3), `2` — список бронювань, `3` — тарифи (Strategy, Factory, Adapter), `4` — статуси (Observer), `0` — вихід.
+Новий пункт меню: `5` — ієрархія рейсів (поліморфізм, конструктори, instanceof, equals, композиція).

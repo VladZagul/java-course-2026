@@ -4,35 +4,26 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-import bus.exception.InvalidPriceException;
 import bus.exception.InvalidQuantityException;
 import bus.observer.BookingObserver;
 
 public class Booking implements Payable, Comparable<Booking> {
     private String passengerName;
-    private String route;
+    private Trip trip;
     private int seats;
-    private double pricePerSeat;
     private BookingStatus status = BookingStatus.NEW;
     private final List<BookingObserver> observers = new ArrayList<>();
 
-    public Booking(String passengerName, String route, int seats, double pricePerSeat)
-            throws InvalidPriceException, InvalidQuantityException {
+    public Booking(String passengerName, Trip trip, int seats) throws InvalidQuantityException {
         if (seats <= 0) {
             throw new InvalidQuantityException(
                 "Кількість місць має бути додатньою, отримано: " + seats, seats
             );
         }
-        if (pricePerSeat <= 0) {
-            throw new InvalidPriceException(
-                "Ціна місця має бути додатньою, отримано: " + pricePerSeat, pricePerSeat
-            );
-        }
 
         this.passengerName = passengerName;
-        this.route = route;
+        this.trip = trip;
         this.seats = seats;
-        this.pricePerSeat = pricePerSeat;
     }
 
     public void addObserver(BookingObserver observer) {
@@ -66,15 +57,19 @@ public class Booking implements Payable, Comparable<Booking> {
 
     @Override
     public double getTotalCost() {
-        return seats * pricePerSeat;
+        return seats * trip.getFinalPrice();
     }
 
     public String getPassengerName() {
         return passengerName;
     }
 
+    public Trip getTrip() {
+        return trip;
+    }
+
     public String getRoute() {
-        return route;
+        return trip.getRoute();
     }
 
     public int getSeats() {
@@ -82,7 +77,7 @@ public class Booking implements Payable, Comparable<Booking> {
     }
 
     public double getPricePerSeat() {
-        return pricePerSeat;
+        return trip.getFinalPrice();
     }
 
     @Override
@@ -93,8 +88,8 @@ public class Booking implements Payable, Comparable<Booking> {
     @Override
     public String toString() {
         return String.format(
-            "Пасажир: %-15s Рейс: %-20s Місць: %-3d Ціна: %-8.2f Сума: %-9.2f Статус: %s",
-            passengerName, route, seats, pricePerSeat, getTotalCost(), status.getTitle()
+            "Пасажир: %-15s Рейс: %-24s Місць: %-3d Ціна: %-8.2f Сума: %-9.2f Статус: %s",
+            passengerName, trip.getRoute(), seats, trip.getFinalPrice(), getTotalCost(), status.getTitle()
         );
     }
 
@@ -108,13 +103,12 @@ public class Booking implements Payable, Comparable<Booking> {
         }
         Booking other = (Booking) obj;
         return seats == other.seats
-                && Double.compare(pricePerSeat, other.pricePerSeat) == 0
                 && passengerName.equals(other.passengerName)
-                && route.equals(other.route);
+                && trip.equals(other.trip);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(passengerName, route, seats, pricePerSeat);
+        return Objects.hash(passengerName, trip, seats);
     }
 }

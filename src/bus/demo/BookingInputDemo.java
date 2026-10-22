@@ -1,5 +1,7 @@
 package bus.demo;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.InputMismatchException;
 import java.util.Scanner;
 
@@ -7,6 +9,8 @@ import bus.exception.DomainException;
 import bus.exception.InvalidPriceException;
 import bus.exception.InvalidQuantityException;
 import bus.model.Booking;
+import bus.model.IntercityTrip;
+import bus.model.Trip;
 
 public class BookingInputDemo {
 
@@ -128,7 +132,9 @@ public class BookingInputDemo {
     private static Booking createBookingWithLogging(String passengerName, String route, int seats, double pricePerSeat)
             throws DomainException {
         try {
-            return new Booking(passengerName, route, seats, pricePerSeat);
+            LocalDateTime departure = LocalDate.now().plusDays(1).atTime(8, 0);
+            Trip trip = new IntercityTrip(route, departure, pricePerSeat);
+            return new Booking(passengerName, trip, seats);
         } catch (InvalidPriceException | InvalidQuantityException e) {
             System.out.println("[LOG] Під час створення бронювання сталася помилка: " + e.getMessage());
             throw e;
